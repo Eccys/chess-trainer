@@ -44,17 +44,28 @@ function flipBoardIfNeeded() {
 function observeTurnIndicator(turnIndicatorNode) {
   console.log('[Chess Trainer] Observer: Now watching turn indicator.', turnIndicatorNode);
   const observer = new MutationObserver(() => {
-    console.log(`[Chess Trainer] Observer: Turn indicator changed to "${turnIndicatorNode.innerText.trim()}". Triggering flip check.`);
-    flipBoardIfNeeded();
+    const newText = turnIndicatorNode.innerText.trim();
+    console.log(`[Chess Trainer] Observer: Turn indicator text changed to "${newText}".`);
+
+    if (newText.includes('to Move')) {
+      console.log('[Chess Trainer] Observer: "to Move" detected. Triggering flip check.');
+      flipBoardIfNeeded();
+    } else {
+      console.log('[Chess Trainer] Observer: Text is not a turn indicator (e.g., "Correct"). Ignoring.');
+    }
   });
 
   observer.observe(turnIndicatorNode, {
     childList: true,
     subtree: true,
-    characterData: true
+    characterData: true,
   });
 
-  flipBoardIfNeeded();
+  // Initial check in case the script loads after the indicator is already there
+  if (turnIndicatorNode.innerText.trim().includes('to Move')) {
+    console.log('[Chess Trainer] Observer: Initial check found a turn indicator. Triggering flip check.');
+    flipBoardIfNeeded();
+  }
 }
 
 function run() {
