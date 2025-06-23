@@ -1,0 +1,23 @@
+{
+  "manifest_version": 2,
+  "name": "Board Flipper",
+  "version": "1.0",
+  "description": "Automatically flips the board on chess.com puzzles.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "https://www.chess.com/puzzles/learning"
+  ],
+  "browser_action": {
+    "default_popup": "popup/popup.html"
+  },
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://www.chess.com/puzzles/learning"],
+      "js": ["content.js"]
+    }
+  ]
+} 
