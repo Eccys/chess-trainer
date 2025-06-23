@@ -1,42 +1,53 @@
-function flipBoard() {
-  const flipButton = document.getElementById('board-controls-flip');
-  if (flipButton) {
-    flipButton.click();
-  }
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
 }
 
-function observeBoard() {
+function getBoardElement() {
+  return document.querySelector('.board') || document.getElementById('board-layout-chessboard');
+}
+
+function flipBoardIfNeeded() {
+  const flipButton = document.getElementById('board-controls-flip');
+  const board = getBoardElement();
+
+  if (!flipButton || !board) {
+    return;
+  }
+
   browser.storage.local.get('isFlipped').then(data => {
-    if (data.isFlipped) {
-      flipBoard(); // Try to flip right away
+    const shouldBeFlipped = data.isFlipped || false;
+    const isActuallyFlipped = board.classList.contains('flipped');
 
-      const observer = new MutationObserver((mutationsList, observer) => {
-        for(const mutation of mutationsList) {
-          if (mutation.type === 'childList') {
-            const flipButton = document.getElementById('board-controls-flip');
-            if (flipButton) {
-              flipBoard();
-              observer.disconnect(); // Stop observing once flipped
-              break;
-            }
-          }
-        }
-      });
-
-      observer.observe(document.body, { childList: true, subtree: true });
+    if (shouldBeFlipped !== isActuallyFlipped) {
+      flipButton.click();
     }
   });
 }
 
-// Listen for changes in storage
-browser.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && changes.isFlipped) {
-    // If setting turns on, and we are on the page, try to flip.
-    if(changes.isFlipped.newValue === true) {
-        observeBoard();
-    }
-  }
+const debouncedFlipCheck = debounce(flipBoardIfNeeded, 250);
+
+const observer = new MutationObserver(() => {
+  debouncedFlipCheck();
 });
 
-// Initial run
-observeBoard(); 
+function run() {
+  setTimeout(flipBoardIfNeeded, 500);
+
+  observer.observe(document.body, { childList: true, subtree: true });
+
+  browser.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.isFlipped) {
+      flipBoardIfNeeded();
+    }
+  });
+}
+
+run(); 
