@@ -15,29 +15,38 @@ function debounce(func, wait) {
   };
 }
 
+let processedBoardElement = null;
+let lastSetStateWasFlipped = false;
+
 function flipBoardIfNeeded() {
-  log('Running check to see if board needs flipping...');
+  log('Running check...');
+
+  const flipButton = document.getElementById('board-controls-flip');
+  const currentBoard = document.querySelector('.board');
+
+  if (!currentBoard || !flipButton) {
+    log('Board or flip button not found. Will re-check on next DOM change.');
+    return;
+  }
+
+  // If the board element on the page is different from the one we've processed,
+  // it means a new puzzle has loaded.
+  if (currentBoard !== processedBoardElement) {
+    log('New board detected. Resetting internal flip state.');
+    processedBoardElement = currentBoard;
+    lastSetStateWasFlipped = false; // A new board always loads in the default (unflipped) state.
+  }
 
   browser.storage.local.get('isFlipped').then(data => {
     const shouldBeFlipped = data.isFlipped || false;
-    log(`Popup toggle is set to: ${shouldBeFlipped ? 'ON' : 'OFF'}.`);
+    log(`Desired state: ${shouldBeFlipped ? 'Flipped' : 'Not Flipped'}. Internal state: ${lastSetStateWasFlipped ? 'Flipped' : 'Not Flipped'}.`);
 
-    const board = document.querySelector('.board');
-    const flipButton = document.getElementById('board-controls-flip');
-
-    if (!board || !flipButton) {
-      log('Board or flip button not found. Will re-check on next DOM change.');
-      return;
-    }
-
-    const isActuallyFlipped = board.classList.contains('flipped');
-    log(`Board's current state is: ${isActuallyFlipped ? 'Flipped' : 'Not Flipped'}.`);
-
-    if (shouldBeFlipped !== isActuallyFlipped) {
-      log(`State mismatch detected. Desired: ${shouldBeFlipped ? 'Flipped' : 'Not Flipped'}, Actual: ${isActuallyFlipped ? 'Flipped' : 'Not Flipped'}. Clicking the flip button.`);
+    if (shouldBeFlipped !== lastSetStateWasFlipped) {
+      log('State mismatch. Clicking the flip button to sync state.');
       flipButton.click();
+      lastSetStateWasFlipped = shouldBeFlipped;
     } else {
-      log('Board is already in the correct state. No action needed.');
+      log('Board is already in the desired state. No action needed.');
     }
   });
 }
@@ -48,8 +57,9 @@ const debouncedFlipCheck = debounce(flipBoardIfNeeded, 300);
 log('Initializing Board Flipper content script.');
 
 // Create a MutationObserver to watch for DOM changes, which indicate a new puzzle.
-const observer = new MutationObserver((mutations) => {
-  log(`DOM change detected. Scheduling a board check.`);
+const observer = new MutationObserver(() => {
+  // We don't need to inspect the mutations, any change could be a new puzzle.
+  // The debounced function will handle checking efficiently.
   debouncedFlipCheck();
 });
 
@@ -62,9 +72,9 @@ observer.observe(document.body, {
 // Listen for changes from the popup toggle.
 browser.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.isFlipped) {
-    log('Popup toggle state changed. Forcing an immediate board check.');
-    // Run immediately, not debounced, for responsiveness.
-    flipBoardIfNeeded();
+    log('Popup toggle changed. Forcing an immediate check.');
+    // Use the debounced function to avoid race conditions with other DOM changes.
+    debouncedFlipCheck();
   }
 });
 
