@@ -10,44 +10,44 @@ function debounce(func, wait) {
   };
 }
 
-function getBoardElement() {
-  return document.querySelector('.board') || document.getElementById('board-layout-chessboard');
-}
-
-function flipBoardIfNeeded() {
-  const flipButton = document.getElementById('board-controls-flip');
-  const board = getBoardElement();
-
-  if (!flipButton || !board) {
-    return;
-  }
-
+function processBoard() {
   browser.storage.local.get('isFlipped').then(data => {
-    const shouldBeFlipped = data.isFlipped || false;
-    const isActuallyFlipped = board.classList.contains('flipped');
-
-    if (shouldBeFlipped !== isActuallyFlipped) {
-      flipButton.click();
+    if (!data.isFlipped) {
+      return;
     }
+
+    const board = document.querySelector('.board, #board-layout-chessboard');
+    const flipButton = document.getElementById('board-controls-flip');
+
+    if (!board || !flipButton) {
+      return;
+    }
+
+    if (board.dataset.boardFlipperApplied) {
+      return;
+    }
+
+    flipButton.click();
+    board.dataset.boardFlipperApplied = 'true';
   });
 }
 
-const debouncedFlipCheck = debounce(flipBoardIfNeeded, 250);
+const debouncedProcessBoard = debounce(processBoard, 250);
+const observer = new MutationObserver(debouncedProcessBoard);
 
-const observer = new MutationObserver(() => {
-  debouncedFlipCheck();
+browser.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.isFlipped && changes.isFlipped.newValue === true) {
+    const board = document.querySelector('.board, #board-layout-chessboard');
+    if (board) {
+      delete board.dataset.boardFlipperApplied;
+    }
+    processBoard();
+  }
 });
 
-function run() {
-  setTimeout(flipBoardIfNeeded, 500);
+observer.observe(document.body, {
+  childList: true,
+  subtree: true,
+});
 
-  observer.observe(document.body, { childList: true, subtree: true });
-
-  browser.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && changes.isFlipped) {
-      flipBoardIfNeeded();
-    }
-  });
-}
-
-run(); 
+debouncedProcessBoard(); 
