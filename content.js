@@ -1,25 +1,13 @@
 let isFlipping = false;
 
-function debounce(func, wait) {
-  let timeout;
-  return function executedFunction(...args) {
-    const later = () => {
-      clearTimeout(timeout);
-      func(...args);
-    };
-    clearTimeout(timeout);
-    timeout = setTimeout(later, wait);
-  };
-}
-
 function getBoardElement() {
   return document.querySelector('.board') || document.getElementById('board-layout-chessboard');
 }
 
 function flipBoardIfNeeded() {
-  console.log('Flip Check: Starting...');
+  console.log('[Chess Trainer] Flip Check: Starting...');
   if (isFlipping) {
-    console.log('Flip Check: Aborted (already flipping).');
+    console.log('[Chess Trainer] Flip Check: Aborted (already flipping).');
     return;
   }
 
@@ -27,48 +15,70 @@ function flipBoardIfNeeded() {
   const board = getBoardElement();
 
   if (!flipButton || !board) {
-    console.log('Flip Check: Aborted (board or button not found).');
+    console.log('[Chess Trainer] Flip Check: Aborted (board or button not found).');
     return;
   }
 
   isFlipping = true;
-  console.log('Flip Check: Lock acquired.');
+  console.log('[Chess Trainer] Flip Check: Lock acquired.');
 
   browser.storage.local.get('isFlipped').then(data => {
     const shouldBeFlipped = data.isFlipped || false;
     const isActuallyFlipped = board.classList.contains('flipped');
-    console.log(`Flip Check: Should be flipped? ${shouldBeFlipped}. Is it actually flipped? ${isActuallyFlipped}.`);
+    console.log(`[Chess Trainer] Flip Check: Should be flipped? ${shouldBeFlipped}. Is it actually flipped? ${isActuallyFlipped}.`);
 
     if (shouldBeFlipped !== isActuallyFlipped) {
-      console.log('Flip Check: Mismatch detected. Clicking flip button.');
+      console.log('[Chess Trainer] Flip Check: Mismatch detected. Clicking flip button.');
       flipButton.click();
     } else {
-      console.log('Flip Check: Board is in the correct state.');
+      console.log('[Chess Trainer] Flip Check: Board is in the correct state.');
     }
   });
 
   setTimeout(() => {
     isFlipping = false;
-    console.log('Flip Check: Lock released.');
+    console.log('[Chess Trainer] Flip Check: Lock released.');
   }, 500);
 }
 
-const debouncedFlipCheck = debounce(flipBoardIfNeeded, 250);
+function observeTurnIndicator(turnIndicatorNode) {
+  console.log('[Chess Trainer] Observer: Now watching turn indicator.', turnIndicatorNode);
+  const observer = new MutationObserver(() => {
+    console.log(`[Chess Trainer] Observer: Turn indicator changed to "${turnIndicatorNode.innerText.trim()}". Triggering flip check.`);
+    flipBoardIfNeeded();
+  });
 
-const observer = new MutationObserver((mutations) => {
-  console.log('Observer: Detected page change.');
-  debouncedFlipCheck();
-});
+  observer.observe(turnIndicatorNode, {
+    childList: true,
+    subtree: true,
+    characterData: true
+  });
+
+  flipBoardIfNeeded();
+}
 
 function run() {
-  console.log('Defensive Mode: Content script loaded.');
-  setTimeout(flipBoardIfNeeded, 500);
+  console.log('[Chess Trainer] Content script loaded.');
 
-  observer.observe(document.body, { childList: true, subtree: true });
+  const turnIndicatorSelector = 'span.section-heading-title.section-heading-normal';
+
+  const elementFinderObserver = new MutationObserver((mutations, observer) => {
+    const turnIndicatorNode = document.querySelector(turnIndicatorSelector);
+    if (turnIndicatorNode) {
+      console.log('[Chess Trainer] Observer: Found turn indicator element.');
+      observer.disconnect();
+      observeTurnIndicator(turnIndicatorNode);
+    }
+  });
+
+  elementFinderObserver.observe(document.body, {
+    childList: true,
+    subtree: true
+  });
 
   browser.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes.isFlipped) {
-      console.log('Observer: Storage change detected.');
+      console.log('[Chess Trainer] Observer: Storage change detected from popup.');
       flipBoardIfNeeded();
     }
   });
