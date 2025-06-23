@@ -1,11 +1,12 @@
 {
   "manifest_version": 2,
-  "name": "Chess Trainer",
-  "version": "1.1",
-  "description": "Automatically flips the board on chess.com puzzles.",
+  "name": "Chess.com Puzzle Helper",
+  "version": "2.0",
+  "description": "Enhances chess.com puzzles with an optional auto-flip 'defensive mode' and a configurable session timer with chimes.",
   "permissions": [
     "storage",
     "activeTab",
+    "tabs",
     "https://www.chess.com/puzzles/learning"
   ],
   "browser_action": {
@@ -27,5 +28,8 @@
       "matches": ["*://www.chess.com/puzzles/learning"],
       "js": ["content.js"]
     }
+  ],
+  "web_accessible_resources": [
+    "audio/chime.mp3"
   ]
 } 
