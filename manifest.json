@@ -1,14 +1,11 @@
 {
-  "manifest_version": 2,
-  "name": "Chess Trainer",
-  "version": "1.1",
+  "manifest_version": 3,
+  "name": "Chess Flipper",
+  "version": "2.0",
   "description": "Automatically flips the board on chess.com puzzles.",
-  "permissions": [
-    "storage",
-    "activeTab",
-    "https://www.chess.com/puzzles/learning"
-  ],
-  "browser_action": {
+  "permissions": ["storage"],
+  "host_permissions": ["*://www.chess.com/puzzles/*"],
+  "action": {
     "default_popup": "popup/popup.html",
     "default_icon": {
       "16": "icons/icon-16.png",
@@ -20,11 +17,11 @@
     "128": "icons/icon-128.png"
   },
   "background": {
-    "scripts": ["background.js"]
+    "service_worker": "background.js"
   },
   "content_scripts": [
     {
-      "matches": ["*://www.chess.com/puzzles/learning"],
+      "matches": ["*://www.chess.com/puzzles/*"],
       "js": ["content.js"]
     }
   ]

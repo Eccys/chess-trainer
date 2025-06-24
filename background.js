@@ -1,3 +1,3 @@
-browser.runtime.onInstalled.addListener(() => {
-  browser.storage.local.set({ isFlipped: false });
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.storage.local.set({ isFlipped: false });
 }); 
