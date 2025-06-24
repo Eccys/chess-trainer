@@ -1,4 +1,4 @@
-# Chess.com Puzzle Helper
+# Chess Trainer
 
 A modern browser extension that enhances chess.com puzzles with an optional auto-flip 'defensive mode' and a configurable session timer with chimes. Inspired by chesspage1's course!
 
@@ -23,7 +23,7 @@ Built with [WXT](https://wxt.dev) for modern development and cross-browser compa
 1. Clone this repository:
    ```bash
    git clone <repository-url>
-   cd chess-flipper
+   cd chess-trainer
    ```
 
 2. Install dependencies:

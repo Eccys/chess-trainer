@@ -1,6 +1,6 @@
 {
-  "name": "chess-flipper",
-  "version": "2.0.0",
+  "name": "chess-trainer",
+  "version": "2.5",
   "description": "Enhances chess.com puzzles with an optional auto-flip 'defensive mode' and a configurable session timer with chimes. Inspired by chesspage1's course!",
   "type": "module",
   "scripts": {

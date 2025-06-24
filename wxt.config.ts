@@ -2,8 +2,8 @@ import { defineConfig } from 'wxt';
 
 export default defineConfig({
   manifest: {
-    name: "Chess.com Puzzle Helper",
-    version: "2.0",
+    name: "Chess Trainer",
+    version: "2.5",
     description: "Enhances chess.com puzzles with an optional auto-flip 'defensive mode' and a configurable session timer with chimes. Inspired by chesspage1's course!",
     permissions: [
       "storage",
