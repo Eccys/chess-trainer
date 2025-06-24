@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Defensive Mode</title>
+  <style>
+    body {
+      width: 180px;
+      padding: 15px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #2c2c2c;
+      color: #f0f0f0;
+      transition: height 0.3s ease-in-out;
+    }
+
+    body.modal-active {
+      height: 240px;
+    }
+
+    .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+
+    .container:last-child {
+      margin-bottom: 0;
+    }
+
+    hr {
+      border: none;
+      border-top: 1px solid #555;
+      margin: 15px 0;
+    }
+
+    #chime-interval {
+      width: 50px;
+      background-color: #3e3e3e;
+      color: #f0f0f0;
+      border: 1px solid #555;
+      border-radius: 4px;
+      padding: 4px 8px;
+    }
+
+    #start-stop-button {
+      width: 100%;
+      padding: 8px;
+      font-size: 14px;
+      font-weight: bold;
+      color: white;
+      background-color: #4a90e2;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background-color .3s;
+    }
+
+    #start-stop-button:hover {
+      background-color: #357abd;
+    }
+
+    #start-stop-button.running {
+      background-color: #e24a4a;
+    }
+
+    #start-stop-button.running:hover {
+      background-color: #bd3535;
+    }
+
+    #next-chime-timer {
+      font-size: 14px;
+      color: #a0a0a0;
+      min-width: 40px;
+      text-align: right;
+    }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 24px;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #555;
+      transition: .4s;
+      border-radius: 24px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .4s;
+      border-radius: 50%;
+    }
+
+    input:checked + .slider {
+      background-color: #4a90e2;
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(20px);
+    }
+
+    /* Modal Styles */
+    #session-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.6);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 100;
+    }
+
+    #session-modal.modal-hidden {
+      display: none;
+    }
+
+    .modal-content {
+      background-color: #3e3e3e;
+      padding: 15px;
+      border-radius: 8px;
+      width: 95%;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .modal-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .chime-toggle-container {
+      margin-bottom: 0 !important;
+    }
+
+    #chime-interval-container {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow: hidden;
+      max-height: 100px; /* enough height for content */
+      transition: max-height 0.4s ease-in-out, margin-top 0.4s ease-in-out;
+    }
+
+    #chime-interval-container.hidden {
+      max-height: 0;
+      margin-top: -12px; /* to collapse the gap */
+    }
+
+    .modal-content label {
+      font-size: 14px;
+      margin-bottom: -5px; /* compact layout */
+    }
+
+    .modal-content input {
+      width: 100%;
+      box-sizing: border-box;
+      background-color: #2c2c2c;
+      color: #f0f0f0;
+      border: 1px solid #555;
+      border-radius: 4px;
+      padding: 8px;
+    }
+
+    .modal-row input {
+      width: 60px;
+    }
+
+    .modal-buttons {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 5px; /* add some space before buttons */
+    }
+
+    .modal-buttons button {
+      width: 100%;
+      padding: 8px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    #modal-start-button {
+      background-color: #4a90e2;
+      color: white;
+    }
+
+    #modal-cancel-button {
+      background-color: #555;
+      color: #f0f0f0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <label for="flip-toggle">Defensive Mode</label>
+    <label class="switch">
+      <input type="checkbox" id="flip-toggle">
+      <span class="slider round"></span>
+    </label>
+  </div>
+
+  <hr>
+
+  <div class="container">
+    <button id="start-stop-button">Start Session</button>
+  </div>
+
+  <div id="session-modal" class="modal-hidden">
+    <div class="modal-content">
+      <div class="modal-row">
+        <label for="session-duration">Session Duration (minutes)</label>
+        <input type="number" id="session-duration" value="20" min="1">
+      </div>
+      
+      <div class="container chime-toggle-container">
+        <label for="chime-toggle">Enable Chime</label>
+        <label class="switch">
+          <input type="checkbox" id="chime-toggle-checkbox">
+          <span class="slider round"></span>
+        </label>
+      </div>
+
+      <div id="chime-interval-container">
+        <label for="chime-interval">Chime Interval (seconds)</label>
+        <input type="number" id="chime-interval" value="20" min="1">
+      </div>
+
+      <div class="modal-buttons">
+        <button id="modal-cancel-button">Cancel</button>
+        <button id="modal-start-button">Start</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const toggle = document.getElementById('flip-toggle');
+      const startStopButton = document.getElementById('start-stop-button');
+      
+      // Modal elements
+      const modal = document.getElementById('session-modal');
+      const modalStartButton = document.getElementById('modal-start-button');
+      const modalCancelButton = document.getElementById('modal-cancel-button');
+      const sessionDurationInput = document.getElementById('session-duration');
+      const chimeToggle = document.getElementById('chime-toggle-checkbox');
+      const chimeIntervalContainer = document.getElementById('chime-interval-container');
+      const chimeIntervalInput = document.getElementById('chime-interval');
+
+      function updatePopup(state) {
+        if (state.isRunning) {
+          startStopButton.textContent = 'Stop Session';
+          startStopButton.classList.add('running');
+        } else {
+          startStopButton.textContent = 'Start Session';
+          startStopButton.classList.remove('running');
+        }
+      }
+
+      function showModal() {
+        document.body.classList.add('modal-active');
+        
+        // Set chime to be off by default every time modal is opened
+        chimeToggle.checked = false;
+        chimeIntervalContainer.classList.add('hidden');
+        chimeIntervalInput.value = 20; // Reset to default
+
+        modal.classList.remove('modal-hidden');
+      }
+
+      function hideModal() {
+        document.body.classList.remove('modal-active');
+        modal.classList.add('modal-hidden');
+      }
+
+      // Initial state fetch
+      browser.storage.local.get(['isFlipped', 'chimeInterval']).then(data => {
+        toggle.checked = data.isFlipped || false;
+        if (data.chimeInterval) {
+          chimeIntervalInput.value = data.chimeInterval;
+        }
+      });
+
+      browser.runtime.sendMessage({ command: 'getTimerState' }, response => {
+        updatePopup(response);
+      });
+      
+      // Listen for storage changes to keep popup sync'd
+      browser.storage.onChanged.addListener((changes, area) => {
+        if (area === 'local' && (changes.timerState || changes.chimeInterval)) {
+            browser.runtime.sendMessage({ command: 'getTimerState' }, response => {
+                updatePopup(response);
+            });
+        }
+      });
+
+      // Event listeners
+      toggle.addEventListener('change', () => {
+        browser.storage.local.set({ isFlipped: toggle.checked });
+      });
+
+      startStopButton.addEventListener('click', () => {
+        browser.runtime.sendMessage({ command: 'getTimerState' }, state => {
+          if (state.isRunning) {
+            browser.runtime.sendMessage({ command: 'stopTimer' });
+          } else {
+            showModal();
+          }
+        });
+      });
+
+      chimeToggle.addEventListener('change', () => {
+        chimeIntervalContainer.classList.toggle('hidden', !chimeToggle.checked);
+      });
+
+      modalCancelButton.addEventListener('click', hideModal);
+
+      modalStartButton.addEventListener('click', () => {
+        const sessionDuration = parseInt(sessionDurationInput.value, 10);
+        if (!isNaN(sessionDuration) && sessionDuration > 0) {
+          let newInterval = 0;
+          if (chimeToggle.checked) {
+            newInterval = parseInt(chimeIntervalInput.value, 10);
+          }
+          browser.storage.local.set({ chimeInterval: newInterval });
+          browser.runtime.sendMessage({ command: 'startTimer', sessionDuration: sessionDuration, interval: newInterval });
+          hideModal();
+        }
+      });
+    });
+  </script>
+</body>
+</html>
