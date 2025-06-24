@@ -1,6 +1,6 @@
 # WXT Migration Summary
 
-This document summarizes the successful migration of the Chess.com Puzzle Helper extension from a traditional Firefox extension structure to WXT.
+This document summarizes the successful migration of the Chess Trainer extension from a traditional Firefox extension structure to WXT.
 
 ## Migration Overview
 
