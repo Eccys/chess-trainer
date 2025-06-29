@@ -309,14 +309,14 @@
         }
       });
 
-      browser.runtime.sendMessage({ command: 'getTimerState' }, response => {
+      browser.runtime.sendMessage({ command: 'getTimerState' }).then(response => {
         updatePopup(response);
       });
       
       // Listen for storage changes to keep popup sync'd
       browser.storage.onChanged.addListener((changes, area) => {
         if (area === 'local' && (changes.timerState || changes.chimeInterval)) {
-            browser.runtime.sendMessage({ command: 'getTimerState' }, response => {
+            browser.runtime.sendMessage({ command: 'getTimerState' }).then(response => {
                 updatePopup(response);
             });
         }
@@ -328,7 +328,7 @@
       });
 
       startStopButton.addEventListener('click', () => {
-        browser.runtime.sendMessage({ command: 'getTimerState' }, state => {
+        browser.runtime.sendMessage({ command: 'getTimerState' }).then(state => {
           if (state.isRunning) {
             browser.runtime.sendMessage({ command: 'stopTimer' });
           } else {
@@ -358,4 +358,4 @@
     });
   </script>
 </body>
-</html>
+</html> 
