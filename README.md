@@ -4,6 +4,10 @@ A modern browser extension that enhances chess.com puzzles with an optional auto
 
 Built with [WXT](https://wxt.dev) for modern development and cross-browser compatibility.
 
+> [!NOTE]
+> Version 2.5 does NOT work with chrome.
+
+
 ## Features
 
 - **Defensive Mode**: Automatically flips the board when doing puzzles to practice from the defensive perspective
