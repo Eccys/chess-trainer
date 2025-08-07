@@ -89,12 +89,24 @@ export default defineBackground(() => {
     }, 1000);
   }
 
-  browser.runtime.onInstalled.addListener(() => {
-    browser.storage.local.set({ 
-      isFlipped: false,
-      timerState: 'stopped',
-      chimeInterval: 20
-    });
+  browser.runtime.onInstalled.addListener((details) => {
+    console.log('[Background] Extension installed/updated:', details);
+    
+    // Only set defaults on fresh install, not on updates
+    if (details.reason === 'install') {
+      console.log('[Background] Fresh install - setting defaults');
+      browser.storage.local.set({ 
+        isFlipped: false,
+        timerState: 'stopped',
+        chimeInterval: 20
+      });
+    } else {
+      console.log('[Background] Extension updated - not resetting user preferences');
+      // Only ensure timerState is stopped on updates, don't touch isFlipped
+      browser.storage.local.set({ 
+        timerState: 'stopped'
+      });
+    }
   });
 
   browser.runtime.onMessage.addListener((message, sender, sendResponse) => {

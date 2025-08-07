@@ -1,5 +1,5 @@
 export default defineContentScript({
-  matches: ["*://www.chess.com/puzzles/learning"],
+  matches: ["*://www.chess.com/puzzles/learning*"],
   main: () => {
     let isFlipping = false;
     let timerUI: HTMLElement | null = null;
@@ -14,7 +14,7 @@ export default defineContentScript({
       return document.querySelector('.board') || document.getElementById('board-layout-chessboard');
     }
 
-    function flipBoardIfNeeded() {
+    function flipBoardIfNeeded(turnText?: string) {
       console.log('[Chess Trainer] Flip Check: Starting...');
       if (isFlipping) {
         console.log('[Chess Trainer] Flip Check: Aborted (already flipping).');
@@ -33,15 +33,43 @@ export default defineContentScript({
       console.log('[Chess Trainer] Flip Check: Lock acquired.');
 
       browser.storage.local.get('isFlipped').then(data => {
-        const shouldBeFlipped = data.isFlipped || false;
+        const defensiveModeEnabled = data.isFlipped || false;
         const isActuallyFlipped = board.classList.contains('flipped');
-        console.log(`[Chess Trainer] Flip Check: Should be flipped? ${shouldBeFlipped}. Is it actually flipped? ${isActuallyFlipped}.`);
-
-        if (shouldBeFlipped !== isActuallyFlipped) {
-          console.log('[Chess Trainer] Flip Check: Mismatch detected. Clicking flip button.');
-          flipButton.click();
+        console.log(`[Chess Trainer] Storage check: isFlipped = ${data.isFlipped}, defensiveModeEnabled = ${defensiveModeEnabled}`);
+        console.log(`[Chess Trainer] Board state: isActuallyFlipped = ${isActuallyFlipped}, board classes = "${board.className}"`);
+        
+        if (!defensiveModeEnabled) {
+          // If defensive mode is off, ensure board is not flipped
+          console.log('[Chess Trainer] Defensive mode disabled. Ensuring board is not flipped.');
+          if (isActuallyFlipped) {
+            console.log('[Chess Trainer] Flip Check: Board is flipped but defensive mode is off. Unflipping.');
+            flipButton.click();
+          } else {
+            console.log('[Chess Trainer] Flip Check: Board is correctly not flipped.');
+          }
         } else {
-          console.log('[Chess Trainer] Flip Check: Board is in the correct state.');
+          // Defensive mode is enabled - determine if we should flip based on turn
+          let shouldBeFlipped = false;
+          
+          if (turnText) {
+            // In defensive mode, flip so you play as the color whose turn it is
+            // If it's Black's turn, flip so Black pieces are at bottom (play as Black)
+            // If it's White's turn, don't flip so White pieces are at bottom (play as White)
+            shouldBeFlipped = turnText.toLowerCase().includes('black') && turnText.includes('to move');
+            console.log(`[Chess Trainer] Defensive mode: Turn is "${turnText}", should be flipped: ${shouldBeFlipped}`);
+          } else {
+            // Fallback if no turn text provided
+            shouldBeFlipped = isActuallyFlipped;
+            console.log('[Chess Trainer] Defensive mode: No turn text provided, maintaining current state.');
+          }
+
+          if (shouldBeFlipped !== isActuallyFlipped) {
+            console.log(`[Chess Trainer] 🔄 FLIPPING BOARD: Should be flipped: ${shouldBeFlipped}, actually flipped: ${isActuallyFlipped}. Clicking flip button.`);
+            flipButton.click();
+            console.log(`[Chess Trainer] 🔄 Flip button clicked! Board should now be ${shouldBeFlipped ? 'flipped' : 'normal'}.`);
+          } else {
+            console.log(`[Chess Trainer] ✅ Board already correct: Should be flipped: ${shouldBeFlipped}, actually flipped: ${isActuallyFlipped}.`);
+          }
         }
       });
 
@@ -53,6 +81,7 @@ export default defineContentScript({
 
     function observeTurnIndicator(turnIndicatorNode: Element) {
       let lastTurnText = '';
+      let lastProcessedTurnText = '';  // Track what we actually processed
       console.log('[Chess Trainer] Observer: Now watching turn indicator.', turnIndicatorNode);
 
       const handleTurnChange = (node: Element) => {
@@ -60,15 +89,20 @@ export default defineContentScript({
         console.log(`[Chess Trainer] Observer: Turn indicator text changed to "${newText}".`);
 
         if (newText.includes('to Move')) {
-          if (newText !== lastTurnText) {
+          // Only process if this is truly a new turn, not just a duplicate
+          if (newText !== lastProcessedTurnText) {
             console.log(`[Chess Trainer] Observer: New turn detected ("${newText}"). Triggering flip check.`);
-            lastTurnText = newText;
-            flipBoardIfNeeded();
+            lastProcessedTurnText = newText;
+            flipBoardIfNeeded(newText);
           } else {
-            console.log(`[Chess Trainer] Observer: Turn reverted to the same state ("${newText}"). Ignoring flip.`);
+            console.log(`[Chess Trainer] Observer: Duplicate turn message ("${newText}"). Ignoring to prevent unnecessary flips.`);
           }
+          lastTurnText = newText;
         } else {
-          console.log(`[Chess Trainer] Observer: Text is not a turn indicator (e.g., "Correct"). Ignoring.`);
+          // If text changes to something else (like "Correct"), update lastTurnText but not lastProcessedTurnText
+          // This way, when it goes back to a turn indicator, it will be processed as new if it's different
+          console.log(`[Chess Trainer] Observer: Text is not a turn indicator (e.g., "Correct"). Updating lastTurnText but not triggering flip.`);
+          lastTurnText = newText;
         }
       };
 
@@ -224,7 +258,7 @@ export default defineContentScript({
     }
 
     function run() {
-      console.log('[Chess Trainer] Content script loaded.');
+      console.log('[Chess Trainer] Content script loaded! URL:', window.location.href);
 
       createTimerUI();
 
@@ -249,7 +283,7 @@ export default defineContentScript({
 
         if (changes.isFlipped) {
           console.log('[Chess Trainer] Observer: Storage change detected from popup.');
-          flipBoardIfNeeded();
+          flipBoardIfNeeded(); // Called without turn text when toggled from popup
         }
         
         if (changes.timerState) {

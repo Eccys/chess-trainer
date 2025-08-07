@@ -11,7 +11,7 @@ export default defineConfig({
       "tabs"
     ],
     host_permissions: [
-      "https://www.chess.com/puzzles/learning"
+      "https://www.chess.com/puzzles/learning*"
     ],
     action: {
       default_popup: "popup.html",

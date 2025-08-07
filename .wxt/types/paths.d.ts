@@ -10,6 +10,7 @@ declare module "wxt/browser" {
     | "/icon-128.png"
     | "/icon-16.png"
     | "/icon-48.png"
+    | "/popup-script.js"
     | "/popup.html"
   type HtmlPublicPath = Extract<PublicPath, `${string}.html`>
   export interface WxtRuntime {
