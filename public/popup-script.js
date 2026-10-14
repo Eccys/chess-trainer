@@ -1,23 +1,69 @@
 document.addEventListener('DOMContentLoaded', () => {
+  // Cross-browser extension API compatibility (Firefox `browser` + Chrome `chrome`)
+  const rawExt = typeof globalThis.browser !== 'undefined' ? globalThis.browser : globalThis.chrome;
+
+  const storageGet = (keys) =>
+    new Promise((resolve, reject) => {
+      try {
+        const maybePromise = rawExt.storage.local.get(keys, (res) => {
+          if (rawExt.runtime?.lastError) {
+            reject(rawExt.runtime.lastError);
+          } else {
+            resolve(res || {});
+          }
+        });
+        if (maybePromise && typeof maybePromise.then === 'function') {
+          maybePromise.then(resolve).catch(reject);
+        }
+      } catch (err) {
+        reject(err);
+      }
+    });
+
+  const storageSet = (items) =>
+    new Promise((resolve, reject) => {
+      try {
+        const maybePromise = rawExt.storage.local.set(items, () => {
+          if (rawExt.runtime?.lastError) {
+            reject(rawExt.runtime.lastError);
+          } else {
+            resolve();
+          }
+        });
+        if (maybePromise && typeof maybePromise.then === 'function') {
+          maybePromise.then(resolve).catch(reject);
+        }
+      } catch (err) {
+        reject(err);
+      }
+    });
+
+  const sendRuntimeMessage = (msg) =>
+    new Promise((resolve, reject) => {
+      try {
+        const maybePromise = rawExt.runtime.sendMessage(msg, (response) => {
+          if (rawExt.runtime?.lastError) {
+            reject(rawExt.runtime.lastError);
+          } else {
+            resolve(response);
+          }
+        });
+        if (maybePromise && typeof maybePromise.then === 'function') {
+          maybePromise.then(resolve).catch(reject);
+        }
+      } catch (err) {
+        reject(err);
+      }
+    });
+
   const toggle = document.getElementById('flip-toggle');
   const startStopButton = document.getElementById('start-stop-button');
-  
-  console.log('[Popup] DOM loaded, toggle element:', toggle);
-  console.log('[Popup] Browser APIs available - browser:', typeof browser, 'browser.storage:', typeof browser?.storage);
-  
-  if (!toggle) {
-    console.error('[Popup] ERROR: Could not find flip-toggle element!');
+
+  if (!toggle || !startStopButton) {
+    console.error('[Popup] ERROR: Could not find required popup controls!');
     return;
   }
-  
-  // Test storage API immediately
-  console.log('[Popup] Testing storage API...');
-  browser.storage.local.get('test').then(data => {
-    console.log('[Popup] Storage API test successful:', data);
-  }).catch(error => {
-    console.error('[Popup] Storage API test FAILED:', error);
-  });
-  
+
   // Modal elements
   const modal = document.getElementById('session-modal');
   const modalStartButton = document.getElementById('modal-start-button');
@@ -28,7 +74,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const chimeIntervalInput = document.getElementById('chime-interval');
 
   function updatePopup(state) {
-    if (state.isRunning) {
+    if (state && state.isRunning) {
       startStopButton.textContent = 'Stop Session';
       startStopButton.classList.add('running');
     } else {
@@ -39,12 +85,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function showModal() {
     document.body.classList.add('modal-active');
-    
-    // Set chime to be off by default every time modal is opened
     chimeToggle.checked = false;
     chimeIntervalContainer.classList.add('hidden');
-    chimeIntervalInput.value = 20; // Reset to default
-
+    chimeIntervalInput.value = 20;
     modal.classList.remove('modal-hidden');
   }
 
@@ -54,69 +97,55 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Initial state fetch
-  browser.storage.local.get(['isFlipped', 'chimeInterval']).then(data => {
-    console.log('[Popup] Initial state fetch:', data);
-    toggle.checked = data.isFlipped || false;
-    console.log('[Popup] Set toggle.checked to:', toggle.checked);
+  storageGet(['isFlipped', 'chimeInterval']).then(data => {
+    toggle.checked = Boolean(data.isFlipped);
     if (data.chimeInterval) {
       chimeIntervalInput.value = data.chimeInterval;
     }
+  }).catch(error => {
+    console.error('[Popup] Failed to fetch initial storage state:', error);
   });
 
-  browser.runtime.sendMessage({ command: 'getTimerState' }).then(response => {
+  sendRuntimeMessage({ command: 'getTimerState' }).then(response => {
     updatePopup(response);
+  }).catch(() => {
+    updatePopup({ isRunning: false });
   });
-  
-  // Listen for storage changes to keep popup sync'd
-  browser.storage.onChanged.addListener((changes, area) => {
-    console.log('[Popup] Storage changed:', { changes, area });
-    
+
+  // Listen for storage changes to keep popup synced
+  rawExt.storage.onChanged.addListener((changes, area) => {
     if (area === 'local') {
-      if (changes.isFlipped) {
-        console.log('[Popup] isFlipped changed:', changes.isFlipped);
-        console.log('[Popup] Current toggle state:', toggle.checked);
-        // Update toggle if it changed from elsewhere
-        if (changes.isFlipped.newValue !== toggle.checked) {
-          console.log('[Popup] Updating toggle to match storage:', changes.isFlipped.newValue);
-          toggle.checked = changes.isFlipped.newValue;
-        }
+      if (changes.isFlipped && changes.isFlipped.newValue !== toggle.checked) {
+        toggle.checked = Boolean(changes.isFlipped.newValue);
       }
-      
+
       if (changes.timerState || changes.chimeInterval) {
-        browser.runtime.sendMessage({ command: 'getTimerState' }).then(response => {
+        sendRuntimeMessage({ command: 'getTimerState' }).then(response => {
           updatePopup(response);
-        });
+        }).catch(() => {});
       }
     }
   });
 
   // Event listeners
   toggle.addEventListener('change', () => {
-    console.log('[Popup] Toggle changed to:', toggle.checked);
-    browser.storage.local.set({ isFlipped: toggle.checked }).then(() => {
-      console.log('[Popup] Storage updated with isFlipped:', toggle.checked);
-      // Verify the storage was actually set
-      browser.storage.local.get('isFlipped').then(data => {
-        console.log('[Popup] Verification - storage now contains:', data);
-      });
-    }).catch(error => {
+    storageSet({ isFlipped: toggle.checked }).catch(error => {
       console.error('[Popup] ERROR setting storage:', error);
     });
   });
 
   startStopButton.addEventListener('click', () => {
-    console.log('[Popup] Start/Stop button clicked');
-    browser.runtime.sendMessage({ command: 'getTimerState' }).then(state => {
-      console.log('[Popup] Timer state:', state);
-      if (state.isRunning) {
-        console.log('[Popup] Stopping timer');
-        browser.runtime.sendMessage({ command: 'stopTimer' });
+    sendRuntimeMessage({ command: 'getTimerState' }).then(state => {
+      if (state && state.isRunning) {
+        return sendRuntimeMessage({ command: 'stopTimer' }).then(() => {
+          updatePopup({ isRunning: false });
+        });
       } else {
-        console.log('[Popup] Showing modal');
         showModal();
       }
     }).catch(error => {
       console.error('[Popup] ERROR getting timer state:', error);
+      showModal();
     });
   });
 
@@ -131,10 +160,17 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!isNaN(sessionDuration) && sessionDuration > 0) {
       let newInterval = 0;
       if (chimeToggle.checked) {
-        newInterval = parseInt(chimeIntervalInput.value, 10);
+        const parsedInterval = parseInt(chimeIntervalInput.value, 10);
+        newInterval = !isNaN(parsedInterval) && parsedInterval > 0 ? parsedInterval : 20;
       }
-      browser.storage.local.set({ chimeInterval: newInterval });
-      browser.runtime.sendMessage({ command: 'startTimer', sessionDuration: sessionDuration, interval: newInterval });
+      storageSet({ chimeInterval: newInterval }).catch(() => {});
+      sendRuntimeMessage({
+        command: 'startTimer',
+        sessionDuration: sessionDuration,
+        interval: newInterval
+      }).then(() => {
+        updatePopup({ isRunning: true });
+      }).catch(() => {});
       hideModal();
     }
   });

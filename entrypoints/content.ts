@@ -1,6 +1,7 @@
 export default defineContentScript({
-  matches: ["*://www.chess.com/puzzles/learning*"],
+  matches: ["*://www.chess.com/puzzles/*"],
   main: () => {
+    const turnIndicatorSelector = 'span.section-heading-title.section-heading-normal';
     let isFlipping = false;
     let timerUI: HTMLElement | null = null;
     let timerDisplay: HTMLElement | null = null;
@@ -8,16 +9,24 @@ export default defineContentScript({
     let minimizeButton: HTMLElement | null = null;
     let timerHeader: HTMLElement | null = null;
     let isDragging = false;
-    let offsetX: number, offsetY: number;
+    let offsetX = 0;
+    let offsetY = 0;
 
     function getBoardElement() {
       return document.querySelector('.board') || document.getElementById('board-layout-chessboard');
     }
 
+    function playChimeAudio() {
+      try {
+        const chime = new Audio(browser.runtime.getURL('/chime.mp3'));
+        chime.play().catch(error => console.error('[Chess Trainer] Chime play failed:', error));
+      } catch (error) {
+        console.error('[Chess Trainer] Failed to create Audio for chime:', error);
+      }
+    }
+
     function flipBoardIfNeeded(turnText?: string) {
-      console.log('[Chess Trainer] Flip Check: Starting...');
       if (isFlipping) {
-        console.log('[Chess Trainer] Flip Check: Aborted (already flipping).');
         return;
       }
 
@@ -25,84 +34,57 @@ export default defineContentScript({
       const board = getBoardElement();
 
       if (!flipButton || !board) {
-        console.log('[Chess Trainer] Flip Check: Aborted (board or button not found).');
         return;
       }
 
+      const effectiveTurnText =
+        turnText ?? document.querySelector(turnIndicatorSelector)?.textContent?.trim() ?? '';
+
       isFlipping = true;
-      console.log('[Chess Trainer] Flip Check: Lock acquired.');
 
       browser.storage.local.get('isFlipped').then(data => {
-        const defensiveModeEnabled = data.isFlipped || false;
+        const defensiveModeEnabled = Boolean(data.isFlipped);
         const isActuallyFlipped = board.classList.contains('flipped');
-        console.log(`[Chess Trainer] Storage check: isFlipped = ${data.isFlipped}, defensiveModeEnabled = ${defensiveModeEnabled}`);
-        console.log(`[Chess Trainer] Board state: isActuallyFlipped = ${isActuallyFlipped}, board classes = "${board.className}"`);
-        
+
         if (!defensiveModeEnabled) {
-          // If defensive mode is off, ensure board is not flipped
-          console.log('[Chess Trainer] Defensive mode disabled. Ensuring board is not flipped.');
           if (isActuallyFlipped) {
-            console.log('[Chess Trainer] Flip Check: Board is flipped but defensive mode is off. Unflipping.');
             flipButton.click();
-          } else {
-            console.log('[Chess Trainer] Flip Check: Board is correctly not flipped.');
           }
         } else {
-          // Defensive mode is enabled - determine if we should flip based on turn
           let shouldBeFlipped = false;
-          
-          if (turnText) {
-            // In defensive mode, flip so you play as the color whose turn it is
-            // If it's Black's turn, flip so Black pieces are at bottom (play as Black)
-            // If it's White's turn, don't flip so White pieces are at bottom (play as White)
-            shouldBeFlipped = turnText.toLowerCase().includes('black') && turnText.includes('to move');
-            console.log(`[Chess Trainer] Defensive mode: Turn is "${turnText}", should be flipped: ${shouldBeFlipped}`);
+
+          if (effectiveTurnText) {
+            const lowerTurn = effectiveTurnText.toLowerCase();
+            // Fix case-sensitivity bug: match both "to Move" and "to move"
+            shouldBeFlipped = lowerTurn.includes('black') && lowerTurn.includes('to move');
           } else {
-            // Fallback if no turn text provided
             shouldBeFlipped = isActuallyFlipped;
-            console.log('[Chess Trainer] Defensive mode: No turn text provided, maintaining current state.');
           }
 
           if (shouldBeFlipped !== isActuallyFlipped) {
-            console.log(`[Chess Trainer] 🔄 FLIPPING BOARD: Should be flipped: ${shouldBeFlipped}, actually flipped: ${isActuallyFlipped}. Clicking flip button.`);
             flipButton.click();
-            console.log(`[Chess Trainer] 🔄 Flip button clicked! Board should now be ${shouldBeFlipped ? 'flipped' : 'normal'}.`);
-          } else {
-            console.log(`[Chess Trainer] ✅ Board already correct: Should be flipped: ${shouldBeFlipped}, actually flipped: ${isActuallyFlipped}.`);
           }
         }
+      }).catch(err => {
+        console.error('[Chess Trainer] Storage read failed:', err);
       });
 
       setTimeout(() => {
         isFlipping = false;
-        console.log('[Chess Trainer] Flip Check: Lock released.');
       }, 500);
     }
 
     function observeTurnIndicator(turnIndicatorNode: Element) {
-      let lastTurnText = '';
-      let lastProcessedTurnText = '';  // Track what we actually processed
-      console.log('[Chess Trainer] Observer: Now watching turn indicator.', turnIndicatorNode);
+      let lastProcessedTurnText = '';
 
       const handleTurnChange = (node: Element) => {
         const newText = node.textContent?.trim() || '';
-        console.log(`[Chess Trainer] Observer: Turn indicator text changed to "${newText}".`);
 
-        if (newText.includes('to Move')) {
-          // Only process if this is truly a new turn, not just a duplicate
+        if (newText.toLowerCase().includes('to move')) {
           if (newText !== lastProcessedTurnText) {
-            console.log(`[Chess Trainer] Observer: New turn detected ("${newText}"). Triggering flip check.`);
             lastProcessedTurnText = newText;
             flipBoardIfNeeded(newText);
-          } else {
-            console.log(`[Chess Trainer] Observer: Duplicate turn message ("${newText}"). Ignoring to prevent unnecessary flips.`);
           }
-          lastTurnText = newText;
-        } else {
-          // If text changes to something else (like "Correct"), update lastTurnText but not lastProcessedTurnText
-          // This way, when it goes back to a turn indicator, it will be processed as new if it's different
-          console.log(`[Chess Trainer] Observer: Text is not a turn indicator (e.g., "Correct"). Updating lastTurnText but not triggering flip.`);
-          lastTurnText = newText;
         }
       };
 
@@ -116,7 +98,6 @@ export default defineContentScript({
         characterData: true,
       });
 
-      // Initial check in case the script loads after the indicator is already there
       handleTurnChange(turnIndicatorNode);
     }
 
@@ -156,7 +137,7 @@ export default defineContentScript({
           box-shadow: 0 4px 12px rgba(0,0,0,0.4);
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
           z-index: 10000;
-          display: none; /* Hidden by default */
+          display: none;
           user-select: none;
           flex-direction: column;
         }
@@ -200,7 +181,6 @@ export default defineContentScript({
       `;
       document.head.appendChild(style);
 
-      // Check initial state
       browser.storage.local.get('timerState').then(data => {
         if (data.timerState === 'running') {
           showTimer();
@@ -217,17 +197,17 @@ export default defineContentScript({
     }
 
     function updateTimerDisplay(time: number | null, timeToNextChime: number | null) {
-      if (time !== null) {
+      if (time !== null && time >= 0) {
         const minutes = Math.floor(time / 60).toString().padStart(2, '0');
         const seconds = (time % 60).toString().padStart(2, '0');
         if (timerDisplay) timerDisplay.textContent = `${minutes}:${seconds}`;
       }
       if (nextChimeDisplay) {
         if (timeToNextChime !== null && timeToNextChime > 0) {
-            nextChimeDisplay.textContent = `Next chime in: ${timeToNextChime}s`;
-            nextChimeDisplay.style.display = 'block';
+          nextChimeDisplay.textContent = `Next chime in: ${timeToNextChime}s`;
+          nextChimeDisplay.style.display = 'block';
         } else {
-            nextChimeDisplay.style.display = 'none';
+          nextChimeDisplay.style.display = 'none';
         }
       }
     }
@@ -237,6 +217,7 @@ export default defineContentScript({
     }
 
     function onMouseDown(e: MouseEvent) {
+      if ((e.target as HTMLElement)?.id === 'chess-trainer-minimize-button') return;
       e.preventDefault();
       isDragging = true;
       if (timerUI) {
@@ -248,6 +229,7 @@ export default defineContentScript({
     function onMouseMove(e: MouseEvent) {
       if (isDragging && timerUI) {
         e.preventDefault();
+        timerUI.style.right = 'auto';
         timerUI.style.left = `${e.clientX - offsetX}px`;
         timerUI.style.top = `${e.clientY - offsetY}px`;
       }
@@ -258,34 +240,33 @@ export default defineContentScript({
     }
 
     function run() {
-      console.log('[Chess Trainer] Content script loaded! URL:', window.location.href);
-
       createTimerUI();
 
-      const turnIndicatorSelector = 'span.section-heading-title.section-heading-normal';
+      const existingTurnIndicator = document.querySelector(turnIndicatorSelector);
+      if (existingTurnIndicator) {
+        observeTurnIndicator(existingTurnIndicator);
+      } else {
+        const elementFinderObserver = new MutationObserver((_mutations, observer) => {
+          const turnIndicatorNode = document.querySelector(turnIndicatorSelector);
+          if (turnIndicatorNode) {
+            observer.disconnect();
+            observeTurnIndicator(turnIndicatorNode);
+          }
+        });
 
-      const elementFinderObserver = new MutationObserver((mutations, observer) => {
-        const turnIndicatorNode = document.querySelector(turnIndicatorSelector);
-        if (turnIndicatorNode) {
-          console.log('[Chess Trainer] Observer: Found turn indicator element.');
-          observer.disconnect();
-          observeTurnIndicator(turnIndicatorNode);
-        }
-      });
-
-      elementFinderObserver.observe(document.body, {
-        childList: true,
-        subtree: true
-      });
+        elementFinderObserver.observe(document.body, {
+          childList: true,
+          subtree: true
+        });
+      }
 
       browser.storage.onChanged.addListener((changes, area) => {
         if (area !== 'local') return;
 
         if (changes.isFlipped) {
-          console.log('[Chess Trainer] Observer: Storage change detected from popup.');
-          flipBoardIfNeeded(); // Called without turn text when toggled from popup
+          flipBoardIfNeeded();
         }
-        
+
         if (changes.timerState) {
           if (changes.timerState.newValue === 'running') {
             showTimer();
@@ -295,11 +276,14 @@ export default defineContentScript({
         }
       });
 
-      browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-        if (message.command === 'updateTimer') {
+      browser.runtime.onMessage.addListener((message) => {
+        if (message && message.command === 'updateTimer') {
+          if (message.playChime) {
+            playChimeAudio();
+          }
           if (message.isRunning) {
             showTimer();
-            updateTimerDisplay(message.time, message.timeToNextChime);
+            updateTimerDisplay(message.time, message.timeToNextChime ?? null);
           } else {
             hideTimer();
           }
