@@ -1,60 +1,68 @@
 document.addEventListener('DOMContentLoaded', () => {
-  // Cross-browser extension API compatibility (Firefox `browser` + Chrome `chrome`)
-  const rawExt = typeof globalThis.browser !== 'undefined' ? globalThis.browser : globalThis.chrome;
+  // Cross-browser extension API compatibility (Firefox `browser` Promise API + Chrome `chrome` callback API)
+  const hasFirefoxBrowser =
+    typeof globalThis.browser !== 'undefined' &&
+    globalThis.browser &&
+    globalThis.browser.storage &&
+    globalThis.browser.runtime;
+  const rawExt = hasFirefoxBrowser ? globalThis.browser : globalThis.chrome;
 
-  const storageGet = (keys) =>
-    new Promise((resolve, reject) => {
+  const storageGet = (keys) => {
+    if (hasFirefoxBrowser) {
+      return Promise.resolve(globalThis.browser.storage.local.get(keys)).then((res) => res || {});
+    }
+    return new Promise((resolve, reject) => {
       try {
-        const maybePromise = rawExt.storage.local.get(keys, (res) => {
-          if (rawExt.runtime?.lastError) {
-            reject(rawExt.runtime.lastError);
+        globalThis.chrome.storage.local.get(keys, (res) => {
+          if (globalThis.chrome.runtime?.lastError) {
+            reject(globalThis.chrome.runtime.lastError);
           } else {
             resolve(res || {});
           }
         });
-        if (maybePromise && typeof maybePromise.then === 'function') {
-          maybePromise.then(resolve).catch(reject);
-        }
       } catch (err) {
         reject(err);
       }
     });
+  };
 
-  const storageSet = (items) =>
-    new Promise((resolve, reject) => {
+  const storageSet = (items) => {
+    if (hasFirefoxBrowser) {
+      return Promise.resolve(globalThis.browser.storage.local.set(items));
+    }
+    return new Promise((resolve, reject) => {
       try {
-        const maybePromise = rawExt.storage.local.set(items, () => {
-          if (rawExt.runtime?.lastError) {
-            reject(rawExt.runtime.lastError);
+        globalThis.chrome.storage.local.set(items, () => {
+          if (globalThis.chrome.runtime?.lastError) {
+            reject(globalThis.chrome.runtime.lastError);
           } else {
             resolve();
           }
         });
-        if (maybePromise && typeof maybePromise.then === 'function') {
-          maybePromise.then(resolve).catch(reject);
-        }
       } catch (err) {
         reject(err);
       }
     });
+  };
 
-  const sendRuntimeMessage = (msg) =>
-    new Promise((resolve, reject) => {
+  const sendRuntimeMessage = (msg) => {
+    if (hasFirefoxBrowser) {
+      return Promise.resolve(globalThis.browser.runtime.sendMessage(msg));
+    }
+    return new Promise((resolve, reject) => {
       try {
-        const maybePromise = rawExt.runtime.sendMessage(msg, (response) => {
-          if (rawExt.runtime?.lastError) {
-            reject(rawExt.runtime.lastError);
+        globalThis.chrome.runtime.sendMessage(msg, (response) => {
+          if (globalThis.chrome.runtime?.lastError) {
+            reject(globalThis.chrome.runtime.lastError);
           } else {
             resolve(response);
           }
         });
-        if (maybePromise && typeof maybePromise.then === 'function') {
-          maybePromise.then(resolve).catch(reject);
-        }
       } catch (err) {
         reject(err);
       }
     });
+  };
 
   const toggle = document.getElementById('flip-toggle');
   const startStopButton = document.getElementById('start-stop-button');
@@ -73,6 +81,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const chimeIntervalContainer = document.getElementById('chime-interval-container');
   const chimeIntervalInput = document.getElementById('chime-interval');
 
+  let savedChimeInterval = 0;
+
   function updatePopup(state) {
     if (state && state.isRunning) {
       startStopButton.textContent = 'Stop Session';
@@ -85,9 +95,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function showModal() {
     document.body.classList.add('modal-active');
-    chimeToggle.checked = false;
-    chimeIntervalContainer.classList.add('hidden');
-    chimeIntervalInput.value = 20;
+    const enableChime = Number(savedChimeInterval) > 0;
+    chimeToggle.checked = enableChime;
+    chimeIntervalContainer.classList.toggle('hidden', !enableChime);
+    chimeIntervalInput.value = enableChime ? savedChimeInterval : 20;
     modal.classList.remove('modal-hidden');
   }
 
@@ -99,8 +110,11 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initial state fetch
   storageGet(['isFlipped', 'chimeInterval']).then(data => {
     toggle.checked = Boolean(data.isFlipped);
-    if (data.chimeInterval) {
-      chimeIntervalInput.value = data.chimeInterval;
+    if (typeof data.chimeInterval === 'number' && data.chimeInterval >= 0) {
+      savedChimeInterval = data.chimeInterval;
+      if (data.chimeInterval > 0) {
+        chimeIntervalInput.value = data.chimeInterval;
+      }
     }
   }).catch(error => {
     console.error('[Popup] Failed to fetch initial storage state:', error);
@@ -117,6 +131,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (area === 'local') {
       if (changes.isFlipped && changes.isFlipped.newValue !== toggle.checked) {
         toggle.checked = Boolean(changes.isFlipped.newValue);
+      }
+
+      if (changes.chimeInterval && typeof changes.chimeInterval.newValue === 'number') {
+        savedChimeInterval = changes.chimeInterval.newValue;
       }
 
       if (changes.timerState || changes.chimeInterval) {
@@ -163,6 +181,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const parsedInterval = parseInt(chimeIntervalInput.value, 10);
         newInterval = !isNaN(parsedInterval) && parsedInterval > 0 ? parsedInterval : 20;
       }
+      savedChimeInterval = newInterval;
       storageSet({ chimeInterval: newInterval }).catch(() => {});
       sendRuntimeMessage({
         command: 'startTimer',
@@ -175,3 +194,4 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
+
