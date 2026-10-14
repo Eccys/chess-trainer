@@ -5,7 +5,8 @@ export default defineBackground(() => {
     isRunning: false,
     sessionEndTime: 0,
     chimeInterval: 20,
-    chimeLoopStartTime: 0
+    chimeLoopStartTime: 0,
+    lastChimeCycle: 0
   };
 
   function playFallbackChime() {
@@ -61,6 +62,7 @@ export default defineBackground(() => {
     }
     timerState.isRunning = false;
     timerState.sessionEndTime = 0;
+    timerState.lastChimeCycle = 0;
     browser.storage.local.set({ timerState: 'stopped', timerData: timerState });
 
     void broadcastTimerUpdate({
@@ -71,30 +73,10 @@ export default defineBackground(() => {
     });
   }
 
-  function startTimer(sessionDurationMinutes: number, chimeIntervalSeconds: number) {
-    stopTimer(); // Ensure any existing timer is stopped
-
-    const durationMins = Number(sessionDurationMinutes) > 0 ? Number(sessionDurationMinutes) : 20;
-    const intervalSecs = Number(chimeIntervalSeconds) >= 0 ? Number(chimeIntervalSeconds) : 0;
-    const now = Date.now();
-
-    timerState.isRunning = true;
-    timerState.sessionEndTime = now + durationMins * 60 * 1000;
-    timerState.chimeInterval = intervalSecs;
-    timerState.chimeLoopStartTime = now;
-    browser.storage.local.set({ timerState: 'running', timerData: timerState });
-
-    // Send an immediate first update to prevent the UI showing "--:--"
-    const remainingTimeInitial = Math.round((timerState.sessionEndTime - now) / 1000);
-    void broadcastTimerUpdate({
-      command: 'updateTimer',
-      time: remainingTimeInitial,
-      timeToNextChime: timerState.chimeInterval > 0 ? timerState.chimeInterval : null,
-      isRunning: true,
-      playChime: false
-    });
-
-    // Main timer loop (every second)
+  function runTimerLoop() {
+    if (timerId !== null) {
+      clearInterval(timerId);
+    }
     timerId = setInterval(() => {
       const currentNow = Date.now();
       const remainingTime = Math.round((timerState.sessionEndTime - currentNow) / 1000);
@@ -105,15 +87,18 @@ export default defineBackground(() => {
         return;
       }
 
-      const elapsedMs = currentNow - timerState.chimeLoopStartTime;
+      const elapsedMs = Math.max(0, currentNow - timerState.chimeLoopStartTime);
       let shouldPlayChime = false;
 
       if (timerState.chimeInterval > 0) {
         const cycleMs = timerState.chimeInterval * 1000;
+        const currentCycle = Math.floor(elapsedMs / cycleMs);
         const timeInCurrentChimeCycle = elapsedMs % cycleMs;
         timeToNextChime = timerState.chimeInterval - Math.floor(timeInCurrentChimeCycle / 1000);
-        if (elapsedMs >= cycleMs && timeInCurrentChimeCycle < 1000) {
+        if (currentCycle > timerState.lastChimeCycle) {
+          timerState.lastChimeCycle = currentCycle;
           shouldPlayChime = true;
+          browser.storage.local.set({ timerData: timerState });
         }
       }
 
@@ -127,6 +112,52 @@ export default defineBackground(() => {
     }, 1000);
   }
 
+  function startTimer(sessionDurationMinutes: number, chimeIntervalSeconds: number) {
+    stopTimer(); // Ensure any existing timer is stopped
+
+    const durationMins = Number(sessionDurationMinutes) > 0 ? Number(sessionDurationMinutes) : 20;
+    const intervalSecs = Number(chimeIntervalSeconds) >= 0 ? Number(chimeIntervalSeconds) : 0;
+    const now = Date.now();
+
+    timerState.isRunning = true;
+    timerState.sessionEndTime = now + durationMins * 60 * 1000;
+    timerState.chimeInterval = intervalSecs;
+    timerState.chimeLoopStartTime = now;
+    timerState.lastChimeCycle = 0;
+    browser.storage.local.set({ timerState: 'running', timerData: timerState });
+
+    // Send an immediate first update to prevent the UI showing "--:--"
+    const remainingTimeInitial = Math.round((timerState.sessionEndTime - now) / 1000);
+    void broadcastTimerUpdate({
+      command: 'updateTimer',
+      time: remainingTimeInitial,
+      timeToNextChime: timerState.chimeInterval > 0 ? timerState.chimeInterval : null,
+      isRunning: true,
+      playChime: false
+    });
+
+    runTimerLoop();
+  }
+
+  // Restore active timer state if MV3 service worker woke up during an active session
+  browser.storage.local.get(['timerState', 'timerData']).then((stored) => {
+    const data = stored && stored.timerData;
+    if (stored && stored.timerState === 'running' && data && data.isRunning) {
+      if (data.sessionEndTime > Date.now()) {
+        timerState = {
+          isRunning: true,
+          sessionEndTime: Number(data.sessionEndTime),
+          chimeInterval: Number(data.chimeInterval) >= 0 ? Number(data.chimeInterval) : 0,
+          chimeLoopStartTime: Number(data.chimeLoopStartTime) || Date.now(),
+          lastChimeCycle: Number(data.lastChimeCycle) || 0
+        };
+        runTimerLoop();
+      } else {
+        stopTimer();
+      }
+    }
+  }).catch(() => {});
+
   browser.runtime.onInstalled.addListener((details) => {
     console.log('[Background] Extension installed/updated:', details);
 
@@ -134,7 +165,7 @@ export default defineBackground(() => {
       browser.storage.local.set({
         isFlipped: false,
         timerState: 'stopped',
-        chimeInterval: 20,
+        chimeInterval: 0,
         timerData: timerState
       });
     } else {
