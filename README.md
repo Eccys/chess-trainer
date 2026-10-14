@@ -2,11 +2,7 @@
 
 A modern browser extension that enhances chess.com puzzles with an optional auto-flip 'defensive mode' and a configurable session timer with chimes. Inspired by chesspage1's course!
 
-Built with [WXT](https://wxt.dev) for modern development and cross-browser compatibility.
-
-> [!NOTE]
-> Version 2.5 does NOT work with chrome.
-
+Built with [WXT](https://wxt.dev) for modern development and cross-browser compatibility (Chrome Manifest V3 & Firefox).
 
 ## Features
 

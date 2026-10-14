@@ -3,7 +3,7 @@ import { defineConfig } from 'wxt';
 export default defineConfig({
   manifest: {
     name: "Chess Trainer",
-    version: "2.5",
+    version: "2.5.1",
     description: "Enhances chess.com puzzles with an optional auto-flip 'defensive mode' and a configurable session timer with chimes. Inspired by chesspage1's course!",
     permissions: [
       "storage",
@@ -11,7 +11,7 @@ export default defineConfig({
       "tabs"
     ],
     host_permissions: [
-      "https://www.chess.com/puzzles/learning*"
+      "*://www.chess.com/puzzles/*"
     ],
     action: {
       default_popup: "popup.html",
@@ -21,6 +21,7 @@ export default defineConfig({
       }
     },
     icons: {
+      "16": "icon-16.png",
       "48": "icon-48.png",
       "128": "icon-128.png"
     },
