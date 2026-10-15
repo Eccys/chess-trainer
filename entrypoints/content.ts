@@ -25,8 +25,16 @@ export default defineContentScript({
       }
     }
 
+    let pendingFlipCheck = false;
+    let pendingTurnText: string | undefined = undefined;
+    const observedTurnNodes = new WeakSet<Element>();
+
     function flipBoardIfNeeded(turnText?: string) {
       if (isFlipping) {
+        pendingFlipCheck = true;
+        if (turnText !== undefined) {
+          pendingTurnText = turnText;
+        }
         return;
       }
 
@@ -71,20 +79,26 @@ export default defineContentScript({
 
       setTimeout(() => {
         isFlipping = false;
+        if (pendingFlipCheck) {
+          const nextText = pendingTurnText;
+          pendingFlipCheck = false;
+          pendingTurnText = undefined;
+          flipBoardIfNeeded(nextText);
+        }
       }, 500);
     }
 
     function observeTurnIndicator(turnIndicatorNode: Element) {
-      let lastProcessedTurnText = '';
+      if (observedTurnNodes.has(turnIndicatorNode)) {
+        return;
+      }
+      observedTurnNodes.add(turnIndicatorNode);
 
       const handleTurnChange = (node: Element) => {
         const newText = node.textContent?.trim() || '';
 
         if (newText.toLowerCase().includes('to move')) {
-          if (newText !== lastProcessedTurnText) {
-            lastProcessedTurnText = newText;
-            flipBoardIfNeeded(newText);
-          }
+          flipBoardIfNeeded(newText);
         }
       };
 
@@ -181,9 +195,14 @@ export default defineContentScript({
       `;
       document.head.appendChild(style);
 
-      browser.storage.local.get('timerState').then(data => {
+      browser.storage.local.get(['timerState', 'timerData']).then(data => {
         if (data.timerState === 'running') {
           showTimer();
+          const td = data.timerData;
+          if (td && typeof td.sessionEndTime === 'number' && td.sessionEndTime > Date.now()) {
+            const remaining = Math.max(0, Math.round((td.sessionEndTime - Date.now()) / 1000));
+            updateTimerDisplay(remaining, null);
+          }
         }
       });
     }
@@ -245,15 +264,16 @@ export default defineContentScript({
       const existingTurnIndicator = document.querySelector(turnIndicatorSelector);
       if (existingTurnIndicator) {
         observeTurnIndicator(existingTurnIndicator);
-      } else {
-        const elementFinderObserver = new MutationObserver((_mutations, observer) => {
-          const turnIndicatorNode = document.querySelector(turnIndicatorSelector);
-          if (turnIndicatorNode) {
-            observer.disconnect();
-            observeTurnIndicator(turnIndicatorNode);
-          }
-        });
+      }
 
+      const elementFinderObserver = new MutationObserver(() => {
+        const turnIndicatorNode = document.querySelector(turnIndicatorSelector);
+        if (turnIndicatorNode && !observedTurnNodes.has(turnIndicatorNode)) {
+          observeTurnIndicator(turnIndicatorNode);
+        }
+      });
+
+      if (document.body) {
         elementFinderObserver.observe(document.body, {
           childList: true,
           subtree: true
