@@ -140,10 +140,13 @@ export default defineBackground(() => {
   }
 
   // Restore active timer state if MV3 service worker woke up during an active session
-  browser.storage.local.get(['timerState', 'timerData']).then((stored) => {
+  let initResolved = false;
+  const initPromise = Promise.resolve(
+    browser.storage.local.get(['timerState', 'timerData'])
+  ).then((stored) => {
     const data = stored && stored.timerData;
-    if (stored && stored.timerState === 'running' && data && data.isRunning) {
-      if (data.sessionEndTime > Date.now()) {
+    if (stored && stored.timerState === 'running' && data && data.isRunning && !timerState.isRunning) {
+      if (Number(data.sessionEndTime) > Date.now()) {
         timerState = {
           isRunning: true,
           sessionEndTime: Number(data.sessionEndTime),
@@ -156,7 +159,9 @@ export default defineBackground(() => {
         stopTimer();
       }
     }
-  }).catch(() => {});
+  }).catch(() => {}).finally(() => {
+    initResolved = true;
+  });
 
   browser.runtime.onInstalled.addListener((details) => {
     console.log('[Background] Extension installed/updated:', details);
@@ -169,9 +174,13 @@ export default defineBackground(() => {
         timerData: timerState
       });
     } else {
-      browser.storage.local.set({
-        timerState: 'stopped',
-        timerData: timerState
+      void initPromise.then(() => {
+        if (!timerState.isRunning) {
+          browser.storage.local.set({
+            timerState: 'stopped',
+            timerData: timerState
+          });
+        }
       });
     }
   });
@@ -188,8 +197,14 @@ export default defineBackground(() => {
       sendResponse({ ok: true, timerState });
       return false;
     } else if (message.command === 'getTimerState') {
-      sendResponse(timerState);
-      return false;
+      if (initResolved || timerState.isRunning) {
+        sendResponse(timerState);
+        return false;
+      }
+      void initPromise.then(() => {
+        sendResponse(timerState);
+      });
+      return true;
     }
     return false;
   });

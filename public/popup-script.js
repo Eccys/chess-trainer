@@ -120,10 +120,26 @@ document.addEventListener('DOMContentLoaded', () => {
     console.error('[Popup] Failed to fetch initial storage state:', error);
   });
 
-  sendRuntimeMessage({ command: 'getTimerState' }).then(response => {
+  function resolveActiveTimerState() {
+    return sendRuntimeMessage({ command: 'getTimerState' })
+      .catch(() => null)
+      .then((response) => {
+        if (response && response.isRunning) {
+          return response;
+        }
+        return storageGet(['timerState', 'timerData']).then((stored) => {
+          const td = stored && stored.timerData;
+          if (stored && stored.timerState === 'running' && td && td.isRunning && Number(td.sessionEndTime) > Date.now()) {
+            return td;
+          }
+          return { isRunning: false };
+        });
+      })
+      .catch(() => ({ isRunning: false }));
+  }
+
+  resolveActiveTimerState().then(response => {
     updatePopup(response);
-  }).catch(() => {
-    updatePopup({ isRunning: false });
   });
 
   // Listen for storage changes to keep popup synced
