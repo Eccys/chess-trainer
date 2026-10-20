@@ -328,4 +328,11 @@ describe('chess-trainer popup script (public/popup-script.js)', () => {
     assert.equal(getEl('chime-interval').value, 30);
     assert.equal(getEl('start-stop-button').textContent, 'Stop Session');
   });
+
+  it('declares storage, activeTab, and chess.com/puzzles permissions in wxt.config.ts', () => {
+    const wxtConfig = fs.readFileSync(path.join(rootDir, 'wxt.config.ts'), 'utf8');
+    assert.match(wxtConfig, /storage/);
+    assert.match(wxtConfig, /activeTab/);
+    assert.match(wxtConfig, /chess\.com\/puzzles/);
+  });
 });
